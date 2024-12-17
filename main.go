@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 	_ "github.com/lib/pq"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 // Prometheus metrics
@@ -98,6 +99,38 @@ func main() {
 	})
 
 	router.POST("/add_goal", func(c *gin.Context) {
-
+		goalName := c.PostForm("goal_name")
+		if goalName != "" {
+			_, err := db.Exec("INSERT INTO goals (name) VALUES ($1)", goalName)
+			if err != nil {
+				log.Println("Error from inserting into database", err)
+				c.String(http.StatusInternalServerError, "Error inserting into the database")
+				return
+			}
+			addGoalCounter.Inc()
+			httpRequestsCounter.WithLabelValues("/add_goal").Inc()
+		}
+		c.Redirect(http.StatusFound, "/")
 	})
+
+	router.POST("/remove_goal", func(c *gin.Context) {
+		goalID := c.PostForm("goal_id")
+		if goalID != "" {
+			_, err := db.Exec("DELETE FROM goals WHERE id = $1", goalID)
+			if err != nil {
+				log.Println("Error from deleting from database", err)
+				c.String(http.StatusInternalServerError, "Error deleting from the database")
+				return
+			}
+			removeGoalCounter.Inc()
+			httpRequestsCounter.WithLabelValues("/remove_goal").Inc()
+		}
+		c.Redirect(http.StatusFound, "/")
+	})
+	router.GET("/health", func(c *gin.Context) {
+		httpRequestsCounter.WithLabelValues("/health").Inc()
+		c.String(http.StatusOK, "OK")
+	})
+	router.GET("./metrics", gin.WrapH(promhttp.Handler()))
+	router.Run(":8080")
 }
